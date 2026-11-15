@@ -1,15 +1,4 @@
-# Let's inspect what changes are needed for app.py:
-# 1. In "Registrar Evento", remove the staff selection ("Puesto que se necesita") since the user wants it to just register the event details:
-#    - Fecha del Evento (date)
-#    - Hora del Evento (time)
-#    - Cuál Casino (select: Casino 1, Casino 2, Casino 3)
-#    - Tipo de Evento (Boda, XV Años, etc.)
-#    - Nombre del Evento (ej. Boda de los 15s)
-#    - Validación de disponibilidad de fecha para ese casino (comprobar si ese casino ya tiene evento en esa fecha)
-#    - Monto de apartado de dinero (anticipo)
-# Let's write the updated app.py code and verify it.
-
-code = '''import streamlit as st
+import streamlit as st
 import pandas as pd
 import os
 import io
@@ -26,7 +15,7 @@ ARCHIVO_PAGOS = "pagos_casinos.csv"
 st.set_page_config(page_title="Control de Casinos, Pagos y Sobres", page_icon="🎰", layout="wide")
 
 st.title("🎰 Control Inteligente, Calendario, Pagos y Sobres - Casinos")
-st.markdown("Gestión de eventos por casino, disponibilidad de fechas, anticipos y control de sobres.")
+st.markdown("Gestión de eventos por casino, disponibilidad de fechas, anticipos y control de personal.")
 
 # Inicializar personal si no existe
 if not os.path.exists(ARCHIVO_PERSONAL):
@@ -45,7 +34,6 @@ df_personal = pd.read_csv(ARCHIVO_PERSONAL)
 # Cargar eventos
 if os.path.exists(ARCHIVO_EVENTOS):
     df_eventos = pd.read_csv(ARCHIVO_EVENTOS)
-    # Asegurar columnas necesarias
     if "Hora" not in df_eventos.columns:
         df_eventos["Hora"] = "19:00"
     if "Anticipo" not in df_eventos.columns:
@@ -144,7 +132,6 @@ with tab1:
             else:
                 fecha_str = fecha.strftime("%Y-%m-%d")
                 
-                # Verificar disponibilidad en ese casino para esa fecha
                 ocupado = False
                 if not df_eventos.empty:
                     conflicto = df_eventos[(df_eventos["Fecha"] == fecha_str) & (df_eventos["Casino_Evento"] == casino_evento)]
@@ -196,8 +183,6 @@ with tab2:
 
 with tab3:
     st.subheader("✉️ Resumen de Eventos y Anticipos para Imprimir")
-    st.markdown("Genera un reporte en PDF con los eventos, horarios y dinero de apartado recibido.")
-    
     if df_eventos.empty:
         st.info("No hay eventos registrados todavía.")
     else:
@@ -242,10 +227,31 @@ with tab4:
 
 with tab5:
     st.subheader("👥 Directorio del Personal")
-    st.markdown("Directorio guardado para referencia de la administración.")
+    st.markdown("Lista de trabajadores registrados y opción para agregar nuevos miembros.")
+    
     st.dataframe(df_personal, use_container_width=True)
-'''
-
-with open("app.py", "w", encoding="utf-8") as f:
-    f.write(code)
-print("app.py actualizado correctamente.")
+    
+    with st.form("form_nuevo_empleado", clear_on_submit=True):
+        st.markdown("### Agregar Nuevo Trabajador")
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            nuevo_nombre = st.text_input("Nombre Completo")
+        with col_b:
+            nuevo_puesto = st.selectbox("Cargo / Puesto", ["Mesero", "Garrotero", "Barra", "Capitán", "Hostess", "Seguridad", "Otro"])
+        with col_c:
+            nuevo_casino = st.selectbox("Casino Habitual", ["Casino 1", "Casino 2", "Casino 3"])
+        
+        btn_add = st.form_submit_button("Guardar Trabajador en el Directorio")
+        if btn_add:
+            if not nuevo_nombre.strip():
+                st.error("Por favor ingresa el nombre del trabajador.")
+            else:
+                nueva_fila = pd.DataFrame({
+                    "Nombre": [nuevo_nombre.strip()],
+                    "Puesto": [nuevo_puesto],
+                    "Casino_Habitual": [nuevo_casino]
+                })
+                df_personal = pd.concat([df_personal, nueva_fila], ignore_index=True)
+                df_personal.to_csv(ARCHIVO_PERSONAL, index=False)
+                st.success(f"✅ ¡Trabajador **{nuevo_nombre.strip()}** ({nuevo_puesto} - {nuevo_casino}) guardado con éxito!")
+                st.rerun()
