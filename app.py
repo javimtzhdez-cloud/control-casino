@@ -1,4 +1,4 @@
-}# Let's inspect what changes are needed for app.py:
+# Let's inspect what changes are needed for app.py:
 # 1. In "Registrar Evento", remove the staff selection ("Puesto que se necesita") since the user wants it to just register the event details:
 #    - Fecha del Evento (date)
 #    - Hora del Evento (time)
