@@ -200,9 +200,7 @@ with tab2:
         st.markdown("---")
         st.subheader("🗓️ Vista de Calendario (Próximos Eventos)")
         for index, row in df_eventos.sort_values(by="Fecha").iterrows():
-            st.info(f"📅 **{row['Fecha']}** | 🎰 **{row['Casino_Evento']}** | 🎉 **{row['Nombre_Evento']}** ({row['Tipo_Evento']}) 
-
- 👤 Asignado: **{row['Personal']}** (*{row['Puesto']}*) — Paga: **${row.get('Pago_Monto', 0):,.2f}**")
+            st.info(f"📅 **{row['Fecha']}** | 🎰 **{row['Casino_Evento']}** | 🎉 **{row['Nombre_Evento']}** ({row['Tipo_Evento']}) \n\n 👤 Asignado: **{row['Personal']}** (*{row['Puesto']}*) — Paga: **${row.get('Pago_Monto', 0):,.2f}**")
 
         if st.checkbox("Habilitar opción para eliminar un evento"):
             idx_del = st.number_input("Número de fila a eliminar del evento", min_value=0, max_value=max(0, len(df_eventos)-1), step=1)
@@ -230,7 +228,6 @@ with tab3:
             
         st.markdown(f"### 📋 Vista previa de etiquetas para el {fecha_pago_sel} ({filtro_sobre_casino})")
         
-        # Botón para descargar PDF de etiquetas listo para imprimir
         if not df_actuales.empty:
             pdf_bytes = generar_pdf_etiquetas(df_actuales, fecha_pago_sel)
             st.download_button(
