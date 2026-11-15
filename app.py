@@ -1,4 +1,15 @@
-import streamlit as st
+}# Let's inspect what changes are needed for app.py:
+# 1. In "Registrar Evento", remove the staff selection ("Puesto que se necesita") since the user wants it to just register the event details:
+#    - Fecha del Evento (date)
+#    - Hora del Evento (time)
+#    - Cuál Casino (select: Casino 1, Casino 2, Casino 3)
+#    - Tipo de Evento (Boda, XV Años, etc.)
+#    - Nombre del Evento (ej. Boda de los 15s)
+#    - Validación de disponibilidad de fecha para ese casino (comprobar si ese casino ya tiene evento en esa fecha)
+#    - Monto de apartado de dinero (anticipo)
+# Let's write the updated app.py code and verify it.
+
+code = '''import streamlit as st
 import pandas as pd
 import os
 import io
@@ -15,7 +26,7 @@ ARCHIVO_PAGOS = "pagos_casinos.csv"
 st.set_page_config(page_title="Control de Casinos, Pagos y Sobres", page_icon="🎰", layout="wide")
 
 st.title("🎰 Control Inteligente, Calendario, Pagos y Sobres - Casinos")
-st.markdown("Gestión automatizada de personal, eventos, finanzas y control de sobres con generación de etiquetas PDF listas para imprimir.")
+st.markdown("Gestión de eventos por casino, disponibilidad de fechas, anticipos y control de sobres.")
 
 # Inicializar personal si no existe
 if not os.path.exists(ARCHIVO_PERSONAL):
@@ -34,45 +45,22 @@ df_personal = pd.read_csv(ARCHIVO_PERSONAL)
 # Cargar eventos
 if os.path.exists(ARCHIVO_EVENTOS):
     df_eventos = pd.read_csv(ARCHIVO_EVENTOS)
+    # Asegurar columnas necesarias
+    if "Hora" not in df_eventos.columns:
+        df_eventos["Hora"] = "19:00"
+    if "Anticipo" not in df_eventos.columns:
+        df_eventos["Anticipo"] = 1000.0
     if "Pago_Monto" not in df_eventos.columns:
         df_eventos["Pago_Monto"] = 500.0
-        df_eventos.to_csv(ARCHIVO_EVENTOS, index=False)
+    df_eventos.to_csv(ARCHIVO_EVENTOS, index=False)
 else:
-    df_eventos = pd.DataFrame(columns=["Fecha", "Casino_Evento", "Nombre_Evento", "Tipo_Evento", "Personal", "Puesto", "Pago_Monto"])
+    df_eventos = pd.DataFrame(columns=["Fecha", "Hora", "Casino_Evento", "Nombre_Evento", "Tipo_Evento", "Anticipo", "Pago_Monto"])
 
 # Cargar pagos generales
 if os.path.exists(ARCHIVO_PAGOS):
     df_pagos = pd.read_csv(ARCHIVO_PAGOS)
 else:
     df_pagos = pd.DataFrame(columns=["Fecha", "Casino", "Concepto", "Monto", "Estatus", "Metodo"])
-
-def seleccionar_personal_automatico(fecha_str, casino_evento, puesto_requerido, df_p, df_ev):
-    candidatos = df_p[df_p["Puesto"].str.lower() == puesto_requerido.lower()].copy()
-    if candidatos.empty:
-        return None, "No hay personal registrado con ese puesto."
-
-    if not df_ev.empty:
-        ocupados_en_fecha = df_ev[df_ev["Fecha"] == fecha_str]["Personal"].tolist()
-        candidatos = candidatos[~candidatos["Nombre"].isin(ocupados_en_fecha)]
-    
-    if candidatos.empty:
-        return None, "Todo el personal de este puesto ya está asignado en esta fecha."
-
-    if casino_evento == "Casino 3":
-        if not df_ev.empty and "Casino_Evento" in df_ev.columns:
-            historial_c3 = df_ev[df_ev["Casino_Evento"] == "Casino 3"]["Personal"].value_counts()
-            candidatos["Conteo_C3"] = candidatos["Nombre"].map(historial_c3).fillna(0)
-            candidatos = candidatos.sort_values(by="Conteo_C3", ascending=True)
-        elegido = candidatos.iloc[0]["Nombre"]
-        return elegido, "Asignado a Casino 3 (Rotación)."
-    else:
-        habituales = candidatos[candidatos["Casino_Habitual"] == casino_evento]
-        if not habituales.empty:
-            elegido = habituales.iloc[0]["Nombre"]
-            return elegido, f"Asignado a su casino base ({casino_evento})."
-        else:
-            elegido = candidatos.iloc[0]["Nombre"]
-            return elegido, "Asignado por rotación (su base está ocupada)."
 
 def generar_pdf_etiquetas(df_filtrado, fecha_pago):
     buffer = io.BytesIO()
@@ -88,21 +76,12 @@ def generar_pdf_etiquetas(df_filtrado, fecha_pago):
     row = []
 
     for _, row_data in df_filtrado.iterrows():
-        trabajador = row_data["Personal"]
-        futuros = df_eventos[(df_eventos["Personal"] == trabajador) & (df_eventos["Fecha"] > fecha_pago)]
-        proximo_evento = "Sin asignar"
-        if not futuros.empty:
-            futuros = futuros.sort_values(by="Fecha")
-            prox = futuros.iloc[0]
-            proximo_evento = f"{prox['Fecha']} | {prox['Casino_Evento']} ({prox['Nombre_Evento']})"
-
-        monto_val = row_data.get('Pago_Monto', 0)
         content = [
-            Paragraph(f"<b>{row_data['Personal']}</b> ({row_data['Puesto']})", style_title),
+            Paragraph(f"<b>Casino:</b> {row_data['Casino_Evento']} | <b>Fecha:</b> {row_data['Fecha']} ({row_data.get('Hora', '19:00')})", style_title),
             Spacer(1, 3),
-            Paragraph(f"<b>PAGA:</b> ${monto_val:,.2f} MXN | Trab: {row_data['Casino_Evento']} ({row_data['Nombre_Evento']})", style_money),
+            Paragraph(f"<b>Evento:</b> {row_data['Nombre_Evento']} ({row_data['Tipo_Evento']})", style_body),
             Spacer(1, 3),
-            Paragraph(f"<b>Próxima:</b> {proximo_evento}", style_body)
+            Paragraph(f"<b>Anticipo recibido:</b> ${row_data.get('Anticipo', 0):,.2f} MXN", style_money)
         ]
         
         label_table = Table([[content]], colWidths=[270], rowHeights=[95])
@@ -138,58 +117,63 @@ def generar_pdf_etiquetas(df_filtrado, fecha_pago):
     buffer.seek(0)
     return buffer.getvalue()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🤖 Registrar Evento", "📅 Calendario y Casinos", "✉️ Generador de Etiquetas / Sobres", "💰 Control de Pagos", "👥 Directorio Personal"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🤖 Registrar Evento", "📅 Calendario y Casinos", "✉️ Resumen de Eventos", "💰 Control de Pagos", "👥 Directorio Personal"])
 
 with tab1:
-    st.subheader("Registrar Evento y Asignación de Personal")
+    st.subheader("Registrar Evento y Verificar Disponibilidad")
+    st.markdown("Ingresa los datos del evento. El sistema verificará automáticamente si el casino está disponible en esa fecha.")
     
-    with st.form("form_auto_evento", clear_on_submit=True):
+    with st.form("form_evento_puro", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
             fecha = st.date_input("Fecha del Evento", value=datetime.now())
-            casino_evento = st.selectbox("Casino del Evento", ["Casino 1", "Casino 2", "Casino 3"])
-            nombre_evento = st.text_input("Nombre del Evento (ej. Boda de los 15s)")
+            hora = st.text_input("Hora del Evento (ej. 19:00 hrs)", value="19:00 hrs")
+            casino_evento = st.selectbox("Casino", ["Casino 1", "Casino 2", "Casino 3"])
         with col2:
             tipo_evento = st.selectbox("Tipo de Evento", [
                 "Boda", "XV Años", "Cumpleaños / Festejo", "Evento Corporativo", "Comida / Cena Privada", "Otro"
             ])
-            puesto_requerido = st.selectbox("Puesto que se necesita", ["Mesero", "Garrotero", "Barra", "Capitán"])
-            pago_turno = st.number_input("Pago para este sobre ($ MXN)", min_value=0.0, value=500.0, step=50.0)
+            nombre_evento = st.text_input("Nombre del Evento (ej. Boda de los 15s)")
+            anticipo = st.number_input("Dinero de Apartado / Anticipo ($ MXN)", min_value=0.0, value=1000.0, step=100.0)
         
-        submit_btn = st.form_submit_button("Asignar Automáticamente y Guardar")
+        submit_btn = st.form_submit_button("Verificar Disponibilidad y Guardar Evento")
         
         if submit_btn:
             if not nombre_evento.strip():
                 st.error("Por favor ingresa el nombre del evento.")
             else:
                 fecha_str = fecha.strftime("%Y-%m-%d")
-                persona_elegida, mensaje_log = seleccionar_personal_automatico(
-                    fecha_str, casino_evento, puesto_requerido, df_personal, df_eventos
-                )
                 
-                if not persona_elegida:
-                    st.error(f"No se pudo asignar: {mensaje_log}")
+                # Verificar disponibilidad en ese casino para esa fecha
+                ocupado = False
+                if not df_eventos.empty:
+                    conflicto = df_eventos[(df_eventos["Fecha"] == fecha_str) & (df_eventos["Casino_Evento"] == casino_evento)]
+                    if not conflicto.empty:
+                        ocupado = True
+                
+                if ocupado:
+                    st.error(f"❌ **¡No disponible!** El **{casino_evento}** ya tiene un evento agendado para el día **{fecha_str}**.")
                 else:
                     nuevo_registro = pd.DataFrame({
                         "Fecha": [fecha_str],
+                        "Hora": [hora],
                         "Casino_Evento": [casino_evento],
                         "Nombre_Evento": [nombre_evento.strip()],
                         "Tipo_Evento": [tipo_evento],
-                        "Personal": [persona_elegida],
-                        "Puesto": [puesto_requerido],
-                        "Pago_Monto": [pago_turno]
+                        "Anticipo": [anticipo],
+                        "Pago_Monto": [500.0]
                     })
                     df_eventos = pd.concat([df_eventos, nuevo_registro], ignore_index=True)
                     df_eventos.to_csv(ARCHIVO_EVENTOS, index=False)
-                    st.success(f"✅ ¡Asignación Exitosa! **{persona_elegida}** ({puesto_requerido}) fue asignado a **{casino_evento}** con un pago de ${pago_turno:,.2f}. ({mensaje_log})")
+                    st.success(f"✅ **¡Fecha Disponible y Evento Guardado!** El **{casino_evento}** está libre y se registró '{nombre_evento.strip()}' con un apartado de ${anticipo:,.2f} MXN.")
                     st.rerun()
 
 with tab2:
-    st.subheader("📅 Calendario y Desplegable por Casino")
+    st.subheader("📅 Calendario y Vista por Casino")
     if df_eventos.empty:
         st.info("Aún no hay eventos registrados.")
     else:
-        casino_seleccionado = st.selectbox("Selecciona un Casino para ver sus eventos:", ["Todos los Casinos", "Casino 1", "Casino 2", "Casino 3"])
+        casino_seleccionado = st.selectbox("Selecciona un Casino para ver disponibilidad y eventos:", ["Todos los Casinos", "Casino 1", "Casino 2", "Casino 3"])
         df_vista = df_eventos.copy()
         if casino_seleccionado != "Todos los Casinos":
             df_vista = df_vista[df_vista["Casino_Evento"] == casino_seleccionado]
@@ -198,9 +182,9 @@ with tab2:
         st.dataframe(df_vista.sort_values(by="Fecha"), use_container_width=True)
         
         st.markdown("---")
-        st.subheader("🗓️ Vista de Calendario (Próximos Eventos)")
+        st.subheader("🗓️ Agenda de Eventos")
         for index, row in df_eventos.sort_values(by="Fecha").iterrows():
-            st.info(f"📅 **{row['Fecha']}** | 🎰 **{row['Casino_Evento']}** | 🎉 **{row['Nombre_Evento']}** ({row['Tipo_Evento']}) \n\n 👤 Asignado: **{row['Personal']}** (*{row['Puesto']}*) — Paga: **${row.get('Pago_Monto', 0):,.2f}**")
+            st.info(f"📅 **{row['Fecha']}** ({row.get('Hora', '19:00')}) | 🎰 **{row['Casino_Evento']}** | 🎉 **{row['Nombre_Evento']}** ({row['Tipo_Evento']}) — Apartado: **${row.get('Anticipo', 0):,.2f}**")
 
         if st.checkbox("Habilitar opción para eliminar un evento"):
             idx_del = st.number_input("Número de fila a eliminar del evento", min_value=0, max_value=max(0, len(df_eventos)-1), step=1)
@@ -211,68 +195,57 @@ with tab2:
                 st.rerun()
 
 with tab3:
-    st.subheader("✉️ Generador de Etiquetas / Sobres para Imprimir")
-    st.markdown("Imprime **etiquetas adhesivas** (en hojas de calcomanía tamaño carta) para pegarlas en sobres económicos. Así te ahorras comprar sobres impresos caros o escribir a mano para los 40 trabajadores.")
+    st.subheader("✉️ Resumen de Eventos y Anticipos para Imprimir")
+    st.markdown("Genera un reporte en PDF con los eventos, horarios y dinero de apartado recibido.")
     
     if df_eventos.empty:
         st.info("No hay eventos registrados todavía.")
     else:
         fechas_disponibles = sorted(df_eventos["Fecha"].unique(), reverse=True)
-        fecha_pago_sel = st.selectbox("Selecciona la Fecha de Pago (Viernes de entrega):", fechas_disponibles)
+        fecha_pago_sel = st.selectbox("Selecciona la Fecha:", fechas_disponibles)
         
         df_actuales = df_eventos[df_eventos["Fecha"] == fecha_pago_sel]
         
-        filtro_sobre_casino = st.selectbox("Filtrar etiquetas por Casino:", ["Todos los Casinos", "Casino 1", "Casino 2", "Casino 3"], key="filtro_sobre")
+        filtro_sobre_casino = st.selectbox("Filtrar por Casino:", ["Todos los Casinos", "Casino 1", "Casino 2", "Casino 3"], key="filtro_sobre")
         if filtro_sobre_casino != "Todos los Casinos":
             df_actuales = df_actuales[df_actuales["Casino_Evento"] == filtro_sobre_casino]
             
-        st.markdown(f"### 📋 Vista previa de etiquetas para el {fecha_pago_sel} ({filtro_sobre_casino})")
-        
         if not df_actuales.empty:
             pdf_bytes = generar_pdf_etiquetas(df_actuales, fecha_pago_sel)
             st.download_button(
-                label="🖨️ Descargar PDF de Etiquetas (Listo para Imprimir)",
+                label="🖨️ Descargar PDF de Resumen de Eventos",
                 data=pdf_bytes,
-                file_name=f"etiquetas_sobres_{fecha_pago_sel}.pdf",
+                file_name=f"resumen_eventos_{fecha_pago_sel}.pdf",
                 mime="application/pdf",
                 type="primary"
             )
         
         st.markdown("---")
         for _, row in df_actuales.iterrows():
-            trabajador = row["Personal"]
-            futuros = df_eventos[(df_eventos["Personal"] == trabajador) & (df_eventos["Fecha"] > fecha_pago_sel)]
-            proximo_evento = "Sin evento asignado para la próxima semana"
-            if not futuros.empty:
-                futuros = futuros.sort_values(by="Fecha")
-                prox = futuros.iloc[0]
-                proximo_evento = f"📅 {prox['Fecha']} | 🎰 {prox['Casino_Evento']} | 🎉 {prox['Nombre_Evento']}"
-            
             with st.container(border=True):
-                col_s1, col_s2, col_s3 = st.columns([2, 2, 2])
+                col_s1, col_s2 = st.columns(2)
                 with col_s1:
-                    st.markdown(f"### 👤 **{row['Personal']}**")
-                    st.markdown(f"**Puesto:** {row['Puesto']}")
-                    monto_val = row.get('Pago_Monto', 0)
-                    st.markdown(f"💵 **Paga en sobre:** `$%0.2f MXN`" % monto_val)
+                    st.markdown(f"### 🎰 **{row['Casino_Evento']}**")
+                    st.markdown(f"📅 **Fecha:** {row['Fecha']} | ⏰ **Hora:** {row.get('Hora', '19:00')}")
                 with col_s2:
-                    st.markdown(f"📥 **Evento que ya trabajó:**")
-                    st.markdown(f"• Casino: **{row['Casino_Evento']}**")
-                    st.markdown(f"• Fecha: {row['Fecha']}")
-                    st.markdown(f"• Evento: {row['Nombre_Evento']}")
-                with col_s3:
-                    st.markdown(f"🔜 **Próximo Evento (A la etiqueta):**")
-                    st.markdown(f"*{proximo_evento}*")
+                    st.markdown(f"🎉 **Evento:** {row['Nombre_Evento']} ({row['Tipo_Evento']})")
+                    st.markdown(f"💵 **Anticipo / Apartado:** `$%0.2f MXN`" % row.get('Anticipo', 0))
 
 with tab4:
     st.subheader("💰 Control de Pagos y Anticipos Generales")
-    if df_pagos.empty:
-        st.info("Aún no hay pagos registrados.")
+    if df_eventos.empty:
+        st.info("Aún no hay eventos registrados.")
     else:
-        total_ingresos = df_pagos["Monto"].sum()
-        st.metric(label="Total Registrado en Pagos", value=f"${total_ingresos:,.2f} MXN")
-        st.dataframe(df_pagos, use_container_width=True)
+        total_anticipos = df_eventos["Anticipo"].sum()
+        st.metric(label="Total Acumulado de Anticipos", value=f"${total_anticipos:,.2f} MXN")
+        st.dataframe(df_eventos[["Fecha", "Hora", "Casino_Evento", "Nombre_Evento", "Tipo_Evento", "Anticipo"]], use_container_width=True)
 
 with tab5:
     st.subheader("👥 Directorio del Personal")
+    st.markdown("Directorio guardado para referencia de la administración.")
     st.dataframe(df_personal, use_container_width=True)
+'''
+
+with open("app.py", "w", encoding="utf-8") as f:
+    f.write(code)
+print("app.py actualizado correctamente.")
